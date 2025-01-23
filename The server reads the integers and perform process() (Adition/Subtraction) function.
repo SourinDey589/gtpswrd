@@ -1,0 +1,130 @@
+(server.c)------------------------------------------------------------------------------------------------------------------------------------------------
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define BUF_SIZE 1024
+
+// Function to process the integers (Addition/Subtraction)
+int process(int a, int b, char op) {
+    if (op == '+')
+        return a + b;
+    else if (op == '-')
+        return a - b;
+    else
+        return 0; // Default if the operator is invalid
+}
+
+int main(int argc, char *argv[]) {
+    if (argc != 3) {
+        fprintf(stderr, "Usage: %s <IP> <PORT>\n", argv[0]);
+        return 1;
+    }
+
+    int s_sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (s_sock == -1) {
+        perror("Socket creation failed");
+        return 1;
+    }
+
+    struct sockaddr_in s_addr = {
+        .sin_family = AF_INET,
+        .sin_port = htons(atoi(argv[2])),
+        .sin_addr.s_addr = inet_addr(argv[1])
+    };
+
+    if (bind(s_sock, (struct sockaddr *)&s_addr, sizeof(s_addr)) == -1) {
+        perror("Bind failed");
+        close(s_sock);
+        return 1;
+    }
+
+    if (listen(s_sock, 5) == -1) {
+        perror("Listen failed");
+        close(s_sock);
+        return 1;
+    }
+
+    printf("Server listening on %s:%s\n", argv[1], argv[2]);
+
+    while (1) {
+        int c_sock = accept(s_sock, NULL, NULL);
+        if (c_sock == -1) {
+            perror("Accept failed");
+            continue;
+        }
+
+        char buf[BUF_SIZE] = {0};
+        recv(c_sock, buf, BUF_SIZE - 1, 0);
+
+        int num1, num2;
+        char op;
+        sscanf(buf, "%d %d %c", &num1, &num2, &op);
+
+        int result = process(num1, num2, op);
+
+        snprintf(buf, BUF_SIZE, "Result: %d", result);
+        send(c_sock, buf, strlen(buf), 0);
+
+        close(c_sock);
+    }
+
+    close(s_sock);
+    return 0;
+}
+
+(client.c)----------------------------------------------------------------------------------------------------------------------------------------------------
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define BUF_SIZE 1024
+
+int main(int argc, char *argv[]) {
+    if (argc != 4) {
+        fprintf(stderr, "Usage: %s <IP> <PORT> <OPERATOR>\nExample: %s 127.0.0.1 12345 +\n", argv[0], argv[0]);
+        return 1;
+    }
+
+    int c_sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (c_sock == -1) {
+        perror("Socket creation failed");
+        return 1;
+    }
+
+    struct sockaddr_in s_addr = {
+        .sin_family = AF_INET,
+        .sin_port = htons(atoi(argv[2])),
+        .sin_addr.s_addr = inet_addr(argv[1])
+    };
+
+    if (connect(c_sock, (struct sockaddr *)&s_addr, sizeof(s_addr)) == -1) {
+        perror("Connection failed");
+        close(c_sock);
+        return 1;
+    }
+
+    int num1, num2;
+    char op = argv[3][0]; // Operator from the command line
+
+    printf("Enter two integers: ");
+    scanf("%d %d", &num1, &num2);
+
+    char buf[BUF_SIZE];
+    snprintf(buf, BUF_SIZE, "%d %d %c", num1, num2, op);
+
+    send(c_sock, buf, strlen(buf), 0);
+
+    memset(buf, 0, BUF_SIZE);
+    recv(c_sock, buf, BUF_SIZE - 1, 0);
+
+    printf("Server reply: %s\n", buf);
+
+    close(c_sock);
+    return 0;
+}
